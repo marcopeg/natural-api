@@ -14,6 +14,24 @@ def generate_timestamp() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def generate_request_id(dt: datetime | None = None) -> str:
+    """
+    Generate request ID with format: YYYYMMDD-hhmm-s{microtime}
+    
+    Format: YYYYMMDD-hhmm-ssμμμμμμ
+    Example: 20251203-1905-30036009
+    
+    Args:
+        dt: Optional datetime to use (generates new timestamp if not provided)
+    
+    Returns:
+        str: Request ID for tracing
+    """
+    if dt is None:
+        dt = generate_timestamp()
+    return format_filename_timestamp(dt)
+
+
 def format_filename_timestamp(dt: datetime) -> str:
     """
     Format timestamp for log filename.

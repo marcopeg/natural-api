@@ -47,19 +47,21 @@ def _format_metadata_table(entry: LogEntry) -> str:
     
     prompt_name = entry.prompt_filename if entry.prompt_filename else "not-found"
     timestamp_numeric = format_numeric_timestamp(entry.timestamp)
+    request_id_value = entry.request_id if entry.request_id else "none"
     
     lines = [
-        "| Key       | Value                      |",
-        "|-----------|----------------------------|",
-        f"| Timestamp | {timestamp_numeric:<26} |",
-        f"| Status    | {entry.status_code:<26} |",
-        f"| Method    | {entry.method:<26} |",
-        f"| Path      | {entry.path:<26} |",
-        f"| Project   | {entry.project_id:<26} |",
-        f"| User      | {entry.user_id:<26} |",
-        f"| Prompt    | {prompt_name:<26} |",
-        f"| CWD       | {entry.cwd:<26} |",
-        f"| Duration  | {duration_str:<26} |",
+        "| Key        | Value                      |",
+        "|------------|----------------------------|",
+        f"| Request ID | {request_id_value:<26} |",
+        f"| Timestamp  | {timestamp_numeric:<26} |",
+        f"| Status     | {entry.status_code:<26} |",
+        f"| Method     | {entry.method:<26} |",
+        f"| Path       | {entry.path:<26} |",
+        f"| Project    | {entry.project_id:<26} |",
+        f"| User       | {entry.user_id:<26} |",
+        f"| Prompt     | {prompt_name:<26} |",
+        f"| CWD        | {entry.cwd:<26} |",
+        f"| Duration   | {duration_str:<26} |",
     ]
     return "\n".join(lines)
 

@@ -130,6 +130,7 @@ from src.logging.context import RequestLogContext
 from src.logging.writer import write_log
 from src.logging.formatter import format_log_markdown
 from src.logging.html_formatter import format_log_html
+from src.logging.timestamp import generate_request_id, generate_timestamp
 
 
 # Setup logging
@@ -307,12 +308,24 @@ async def dynamic_prompt_handler(request: Request, path: str):
     
     # Initialize logging context early
     method = request.method
+    
+    # Generate timestamp once at the very beginning (used for request_id and log file)
+    request_timestamp = generate_timestamp()
+    
+    # Extract or generate request ID
+    # Client can provide custom request_id, but filename will still use generated timestamp
+    custom_request_id = request.headers.get('x-request-id')
+    file_request_id = generate_request_id(request_timestamp)  # Use same timestamp
+    display_request_id = custom_request_id if custom_request_id else file_request_id
+    
     log_ctx = RequestLogContext(
         method=method,
         path=full_path,
         project_id="default",  # Will be updated
         user_id="anonymous",   # Will be updated
-        headers=dict(request.headers)
+        headers=dict(request.headers),
+        request_id=display_request_id,
+        timestamp=request_timestamp
     )
     
     try:
@@ -356,10 +369,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             log_ctx.set_response(json.dumps(error_detail), 404)
             # Write log before raising exception
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=404, detail=error_detail)
+            raise HTTPException(status_code=404, detail=error_detail, headers={"x-request-id": display_request_id})
         
         logger.info(f"Matched prompt: {match.prompt.filename} (type={match.match_type}, params={match.path_params})")
         log_ctx.set_prompt(match.prompt.filename)
@@ -411,10 +424,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             if prefers_html:
                 # Browser: return HTML
                 html = format_log_html(log_markdown)
-                return HTMLResponse(content=html, status_code=200)
+                return HTMLResponse(content=html, status_code=200, headers={"x-request-id": display_request_id})
             else:
                 # CLI/API clients: return plain markdown
-                return Response(content=log_markdown, media_type="text/plain", status_code=200)
+                return Response(content=log_markdown, media_type="text/plain", status_code=200, headers={"x-request-id": display_request_id})
         
         # NORMAL MODE: Execute and log
         
@@ -448,10 +461,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 500)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=500, detail=error_detail)
+                raise HTTPException(status_code=500, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Validate Content-Type
             content_type = request.headers.get('content-type', '')
@@ -464,10 +477,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 415)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=415, detail=error_detail)
+                raise HTTPException(status_code=415, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Parse request body
             try:
@@ -483,10 +496,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 400)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=400, detail=error_detail)
+                raise HTTPException(status_code=400, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Validate request body
             validated_data, validation_errors = validate_request_body(request_body, pydantic_model)
@@ -499,10 +512,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 422)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=422, detail=error_detail)
+                raise HTTPException(status_code=422, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Convert validated data to body_params (all values as strings for substitution)
             body_params = {k: str(v) if v is not None else "" for k, v in validated_data.items()}
@@ -535,10 +548,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             }
             log_ctx.set_response(json.dumps(error_detail), 503)
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=503, detail=error_detail)
+            raise HTTPException(status_code=503, detail=error_detail, headers={"x-request-id": display_request_id})
         
         # Execute prompt
         result = executor.execute(
@@ -563,10 +576,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             }
             log_ctx.set_response(json.dumps(error_detail), 408)
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=408, detail=error_detail)
+            raise HTTPException(status_code=408, detail=error_detail, headers={"x-request-id": display_request_id})
         
         # Handle execution failure
         if not result.success:
@@ -580,16 +593,16 @@ async def dynamic_prompt_handler(request: Request, path: str):
             }
             log_ctx.set_response(json.dumps(error_detail), 500)
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=500, detail=error_detail)
+            raise HTTPException(status_code=500, detail=error_detail, headers={"x-request-id": display_request_id})
         
         # Success - update log and write before returning
         log_ctx.set_response(result.stdout, 200)
         
         try:
-            log_path = write_log(log_ctx.to_log_entry())
+            log_path = write_log(log_ctx.to_log_entry(), file_request_id)
             logger.debug(f"Request logged to: {log_path}")
         except IOError as e:
             logger.error(f"Failed to write log: {e}")
@@ -598,11 +611,12 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 detail={
                     "error": "Logging Failed",
                     "message": f"Failed to write request log: {str(e)}"
-                }
+                },
+                headers={"x-request-id": display_request_id}
             )
         
         # Return raw stdout as plain text
-        return PlainTextResponse(content=result.stdout)
+        return PlainTextResponse(content=result.stdout, headers={"x-request-id": display_request_id})
         
     except ProviderNotFoundError as e:
         error_detail = {
@@ -612,10 +626,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
         }
         log_ctx.set_response(json.dumps(error_detail), 503)
         try:
-            write_log(log_ctx.to_log_entry())
+            write_log(log_ctx.to_log_entry(), file_request_id)
         except:
             pass
-        raise HTTPException(status_code=503, detail=error_detail)
+        raise HTTPException(status_code=503, detail=error_detail, headers={"x-request-id": display_request_id})
     except HTTPException as e:
         # HTTP exceptions already logged above, just re-raise
         raise
@@ -629,7 +643,7 @@ async def dynamic_prompt_handler(request: Request, path: str):
         log_ctx.set_error("unexpected_error")
         log_ctx.set_response(json.dumps(error_detail), 500)
         try:
-            write_log(log_ctx.to_log_entry())
+            write_log(log_ctx.to_log_entry(), file_request_id)
         except:
             pass
-        raise HTTPException(status_code=500, detail=error_detail)
+        raise HTTPException(status_code=500, detail=error_detail, headers={"x-request-id": display_request_id})

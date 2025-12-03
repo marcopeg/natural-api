@@ -86,23 +86,27 @@ class Config:
         return cls.LOGS_DIR
 
     @classmethod
-    def get_log_file_path(cls, timestamp: datetime, status_code: int) -> Path:
+    def get_log_file_path(cls, timestamp: datetime, status_code: int, file_request_id: str | None = None) -> Path:
         """
         Get full path for log file, creating parent directories.
         
         Args:
             timestamp: UTC timestamp for the log
             status_code: HTTP status code
+            file_request_id: Optional custom request ID for filename (uses timestamp if not provided)
             
         Returns:
-            Path: Full path to log file (logs/YYYY/MM/DD/YYYYMMDD-HHMM-SSμμμμμμ-{code}.md)
+            Path: Full path to log file (logs/YYYY/MM/DD/{file_request_id}-{code}.md)
         """
         from src.logging.timestamp import format_filename_timestamp, format_folder_path
         
         folder_path = cls.LOGS_DIR / format_folder_path(timestamp)
         folder_path.mkdir(parents=True, exist_ok=True)
         
-        filename = f"{format_filename_timestamp(timestamp)}-{status_code}.md"
+        if file_request_id:
+            filename = f"{file_request_id}-{status_code}.md"
+        else:
+            filename = f"{format_filename_timestamp(timestamp)}-{status_code}.md"
         return folder_path / filename
 
 

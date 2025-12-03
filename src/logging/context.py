@@ -2,6 +2,7 @@
 Request logging context manager
 """
 import time
+from datetime import datetime
 from src.logging.models import LogEntry
 from src.logging.timestamp import generate_timestamp
 from src.providers.base import AIProviderResult
@@ -13,7 +14,7 @@ class RequestLogContext:
     Tracks all data needed for final log entry.
     """
     
-    def __init__(self, method: str, path: str, project_id: str, user_id: str, headers: dict):
+    def __init__(self, method: str, path: str, project_id: str, user_id: str, headers: dict, request_id: str | None = None, timestamp: datetime | None = None):
         """
         Initialize logging context.
         
@@ -23,14 +24,17 @@ class RequestLogContext:
             project_id: Project ID (resolved)
             user_id: User ID (resolved)
             headers: Request headers dict
+            request_id: Request ID (custom or generated)
+            timestamp: Request timestamp (generated if not provided)
         """
-        self.timestamp = generate_timestamp()
+        self.timestamp = timestamp if timestamp else generate_timestamp()
         self.start_time = time.time()
         self.method = method
         self.path = path
         self.project_id = project_id
         self.user_id = user_id
         self.headers = headers
+        self.request_id = request_id  # Store the request ID
         
         # Updated during request processing
         self.prompt_filename: str | None = None
@@ -89,6 +93,7 @@ class RequestLogContext:
                 filtered_headers[key] = value
         
         return LogEntry(
+            request_id=self.request_id,
             timestamp=self.timestamp,
             status_code=self.status_code,
             method=self.method,

@@ -24,6 +24,21 @@ def test_request_context_initialization():
     assert ctx.status_code == 500  # Default
     assert ctx.prompt_filename is None
     assert ctx.command == "none"
+    assert ctx.request_id is None  # No custom request_id
+
+
+def test_request_context_with_custom_request_id():
+    """Test context initialization with custom request_id"""
+    ctx = RequestLogContext(
+        method="GET",
+        path="/test",
+        project_id="default",
+        user_id="anonymous",
+        headers={"X-Project-Id": "default"},
+        request_id="custom-request-123"
+    )
+    
+    assert ctx.request_id == "custom-request-123"
 
 
 @patch('time.time', side_effect=[1000.0, 1001.5])

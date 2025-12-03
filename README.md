@@ -1,60 +1,74 @@
-# Natural API
+# NaturalAPI
 
-REST API server that wraps AI CLI tools (Codex, Claude Code, GitHub Copilot) and exposes them via HTTP endpoints.
+_NaturalAPI_ is a REST server (powered by [FastAPI](https://fastapi.tiangolo.com/)) that uses **Agentic CLI tools** 🤖 (Codex, ClaudeCode, GitHub Copilot) to implement server-side logic expressed in **Natural Language**.
 
-## Features
+# Overview
 
-### Phase 1: Basic Server ✅
-A simple FastAPI server with hello world endpoint to verify infrastructure.
+## Define REST endpoints in Markdown
 
-### Phase 2: AI Provider Integration ✅
-Abstract AI provider architecture with Codex CLI integration, comprehensive error handling, and configuration management.
+An endpoint is defined as a _Markdown_ document, here is the source of `chuck-norris.md`:
 
-### Phase 3: Dynamic Prompt-Based Routing ✅
-Route HTTP requests to AI prompts stored as Markdown files with YAML frontmatter. Supports path parameters, variable substitution, and multiple HTTP verbs.
+```Markdown
+Tell a Chuck Norris joke.
+```
 
-### Phase 4: Request Logging & Multi-Project Support ✅
-- **Request Logging**: All API requests logged to markdown files with complete details (request, execution, response)
-- **Multi-Project Support**: Isolated workspaces per project with `X-Project-Id` header
-- **Multi-User Support**: User-specific workspaces within projects with `X-User-Id` header
-- **Dry-Run Mode**: Preview AI commands without execution, returns markdown (CLI) or HTML (browser)
-- **OpenAPI/Swagger**: Auto-generated OpenAPI spec and Swagger UI per project
-- **Request Body Validation**: POST/PUT/PATCH support with Pydantic schema validation
+You can get the result of this "logic" at:
 
-## Quick Start
+```bash
+http://localhost:1337/chuck-norris
+```
 
-### Prerequisites
+## OpenAPI Documentation
+
+The API surface is build dynamically from the markdown documents you provide, and a OpenAPI compliant API documentation is provided at:
+
+- **data:** http://localhost:1337/openapi.json
+- **swagger:** http://localhost:1337/openapi
+
+# Local Development
+
+## Prerequisites
 - Python 3.11
 - Codex CLI (optional, for AI functionality)
 
-### Installation
+## Installation
 
-1. Create and activate virtual environment:
+1. Clone the repository
+```bash
+git clone git@github.com:marcopeg/natural-api.git
+cd natural-api
+```
+
+2. Create and activate virtual environment:
 ```bash
 python3.11 -m venv venv
 source venv/bin/activate  # On macOS/Linux
 ```
 
-2. Install dependencies:
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Start the server:
+4. Start the server:
 ```bash
+# Manual
 uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Makefile
+make start
 ```
 
-4. Test it:
+5. Test it:
 ```bash
 # Get API info
-curl http://localhost:8000/
+curl http://localhost:1337/
 
 # Try a dynamic prompt (fallback route)
-curl http://localhost:8000/hi
+curl http://localhost:1337/hi
 
 # Try a prompt with path parameters
-curl http://localhost:8000/greet/Alice
+curl http://localhost:1337/greet/Alice
 ```
 
 ## Dynamic Prompt-Based Routing
@@ -161,7 +175,7 @@ Expected sentiment: ${body.sentiment}
 
 Request:
 ```bash
-curl -X POST http://localhost:8000/analyze \
+curl -X POST http://localhost:1337/analyze \
   -H "Content-Type: application/json" \
   -d '{"text": "This is amazing!"}'
 ```
@@ -227,7 +241,7 @@ export OPENAPI_ENABLED=true
 **Project Isolation:**
 ```bash
 # Use specific project
-curl http://localhost:8000/hi -H "X-Project-Id: myproject"
+curl http://localhost:1337/hi -H "X-Project-Id: myproject"
 
 # Projects stored in: data/projects/{project-id}/
 ```
@@ -235,7 +249,7 @@ curl http://localhost:8000/hi -H "X-Project-Id: myproject"
 **User Workspaces:**
 ```bash
 # User-specific workspace
-curl http://localhost:8000/hi -H "X-User-Id: alice" -H "X-Project-Id: myproject"
+curl http://localhost:1337/hi -H "X-User-Id: alice" -H "X-Project-Id: myproject"
 
 # Workspace: data/storage/{user-id}/{project-id}/
 ```
@@ -285,31 +299,31 @@ With the server running:
 
 ```bash
 # API info
-curl http://localhost:8000/
+curl http://localhost:1337/
 
 # Dynamic prompts - fallback routes
-curl http://localhost:8000/hi -H "X-Project-Id: default"
+curl http://localhost:1337/hi -H "X-Project-Id: default"
 
 # Dynamic prompts - with path parameters
-curl http://localhost:8000/greet/Alice -H "X-Project-Id: default"
+curl http://localhost:1337/greet/Alice -H "X-Project-Id: default"
 
 # Dynamic prompts - POST requests with body
-curl -X POST http://localhost:8000/analyze \
+curl -X POST http://localhost:1337/analyze \
   -H "Content-Type: application/json" \
   -H "X-Project-Id: default" \
   -d '{"text": "This is amazing!"}'
 
 # Dry-run mode (preview command)
-curl "http://localhost:8000/hi?dry=true" -H "X-Project-Id: default"
+curl "http://localhost:1337/hi?dry=true" -H "X-Project-Id: default"
 
 # OpenAPI/Swagger UI
-open http://localhost:8000/openapi?project=default
+open http://localhost:1337/openapi?project=default
 
 # Multi-project
-curl http://localhost:8000/hi -H "X-Project-Id: test"
+curl http://localhost:1337/hi -H "X-Project-Id: test"
 
 # Multi-user
-curl http://localhost:8000/hi -H "X-User-Id: alice" -H "X-Project-Id: default"
+curl http://localhost:1337/hi -H "X-User-Id: alice" -H "X-Project-Id: default"
 
 # Check logs
 ls -lh data/logs/$(date +%Y/%m/%d)/
@@ -403,7 +417,7 @@ All errors return JSON with details:
 ## Project Structure
 
 ```
-codex-api/
+natural-api/
 ├── src/
 │   ├── main.py              # FastAPI application with dynamic routing
 │   ├── config.py            # Configuration management (multi-project/user)
@@ -460,34 +474,6 @@ codex-api/
 │           └── YYYYMMDD-HHMM-SSμμμμμμ-{status}.md
 └── requirements.txt         # Python dependencies
 ```
-
-## Next Steps
-
-### Completed Features ✅
-- ✅ Basic FastAPI server
-- ✅ AI provider abstraction (Codex)
-- ✅ Dynamic prompt-based routing
-- ✅ Path parameters and variable substitution
-- ✅ Multiple HTTP verbs support (GET, POST, PUT, PATCH, DELETE)
-- ✅ Request body validation with Pydantic schemas
-- ✅ Multi-project support with project isolation
-- ✅ Multi-user support with workspace isolation
-- ✅ Request logging to structured markdown files
-- ✅ Dry-run mode with smart format detection (markdown/HTML)
-- ✅ OpenAPI spec generation and Swagger UI
-- ✅ Comprehensive test coverage (171 tests)
-
-### Future Enhancements
-- Query parameter support (`?role=admin` → `${query.role}`)
-- Prompt caching with file watcher (hot reload)
-- Debug endpoint (`GET /_debug/routes`)
-- Response headers (`X-AI-Provider`, `X-Execution-Time`)
-- Security & isolation (rate limiting, authentication)
-- Streaming responses (SSE for long-running tasks)
-- Add Claude Code provider
-- Add GitHub Copilot CLI provider
-- Log query/search endpoint
-- Web UI for log browsing
 
 ## License
 
