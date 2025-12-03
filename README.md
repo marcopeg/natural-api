@@ -4,26 +4,27 @@ _NaturalAPI_ is a REST server (powered by [FastAPI](https://fastapi.tiangolo.com
 
 # Overview
 
-## Define REST endpoints in Markdown
+## Define REST Endpoints in Markdown
 
 An endpoint is defined as a _Markdown_ document, here is the source of `chuck-norris.md`:
 
 ```Markdown
+---
+route: /chuck
+---
 Tell a Chuck Norris joke.
 ```
 
-You can get the result of this "logic" at:
+You can try the result of this "logic" at:  
+http://localhost:1337/chuck
 
-```bash
-http://localhost:1337/chuck-norris
-```
 
 ## OpenAPI Documentation
 
 The API surface is build dynamically from the markdown documents you provide, and a OpenAPI compliant API documentation is provided at:
 
-- **data:** http://localhost:1337/openapi.json
-- **swagger:** http://localhost:1337/openapi
+- **Data:** http://localhost:1337/openapi.json
+- **Swagger:** http://localhost:1337/openapi
 
 # Local Development
 
