@@ -7,11 +7,11 @@ PYTEST = $(VENV)/bin/pytest
 UVICORN = $(VENV)/bin/uvicorn
 PIP = $(VENV)/bin/pip
 HOST = 0.0.0.0
-PORT = 8000
+PORT = 1337
 LOGS_DIR = data/logs
 
 help:
-	@echo "Codex API - Available commands:"
+	@echo "NaturalAPI - Available commands:"
 	@echo "  make install     - Create venv and install dependencies"
 	@echo "  make freeze      - Freeze current dependencies to requirements.txt"
 	@echo "  make start       - Start the FastAPI server"

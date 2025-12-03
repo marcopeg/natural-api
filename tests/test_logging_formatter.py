@@ -10,6 +10,7 @@ from src.logging.formatter import format_log_markdown
 def test_format_log_markdown_basic_structure():
     """Test that log markdown has all required sections"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=200,
         method="GET",
@@ -31,18 +32,19 @@ def test_format_log_markdown_basic_structure():
     assert "# 2025/12/03 14:15:30.123456 UTC" in markdown
     
     # Check metadata table - numeric timestamp instead of human-readable
-    assert "| Timestamp | 20251203-141530.123456" in markdown
-    assert "| Status    | 200" in markdown
-    assert "| Method    | GET" in markdown
-    assert "| Path      | /hi" in markdown
-    assert "| Project   | default" in markdown
-    assert "| User      | anonymous" in markdown
-    assert "| Prompt    | hi.md" in markdown
-    assert "| Duration  | 1000ms" in markdown
+    assert "| Request ID | 20251203-1415-30123456" in markdown
+    assert "| Timestamp  | 20251203-141530.123456" in markdown
+    assert "| Status     | 200" in markdown
+    assert "| Method     | GET" in markdown
+    assert "| Path       | /hi" in markdown
+    assert "| Project    | default" in markdown
+    assert "| User       | anonymous" in markdown
+    assert "| Prompt     | hi.md" in markdown
+    assert "| Duration   | 1000ms" in markdown
     
     # Check table alignment (26 char width for values)
-    assert "| Key       | Value                      |" in markdown
-    assert "|-----------|----------------------------|" in markdown
+    assert "| Key        | Value                      |" in markdown
+    assert "|------------|----------------------------|" in markdown
     
     # Check sections
     assert "## Command" in markdown
@@ -56,6 +58,7 @@ def test_format_log_markdown_basic_structure():
 def test_format_log_markdown_with_error_context():
     """Test duration field includes error context"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=408,
         method="GET",
@@ -72,12 +75,13 @@ def test_format_log_markdown_with_error_context():
     )
     
     markdown = format_log_markdown(entry)
-    assert "| Duration  | 5000ms (timeout)" in markdown
+    assert "| Duration   | 5000ms (timeout)" in markdown
 
 
 def test_format_log_markdown_no_prompt():
     """Test with no prompt (404 scenario)"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=404,
         method="GET",
@@ -94,12 +98,13 @@ def test_format_log_markdown_no_prompt():
     )
     
     markdown = format_log_markdown(entry)
-    assert "| Prompt    | not-found" in markdown
+    assert "| Prompt     | not-found" in markdown
 
 
 def test_format_log_markdown_headers_filtering():
     """Test that only specific headers are included"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=200,
         method="GET",
@@ -129,6 +134,7 @@ def test_format_log_markdown_json_response():
     """Test that JSON responses are formatted"""
     response_dict = {"status": "success", "data": {"value": 42}}
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=200,
         method="GET",
@@ -153,6 +159,7 @@ def test_format_log_markdown_json_response():
 def test_format_log_markdown_text_response():
     """Test plain text response"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=200,
         method="GET",
@@ -176,6 +183,7 @@ def test_format_log_markdown_text_response():
 def test_format_log_markdown_empty_ai_output():
     """Test with empty AI output"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=404,
         method="GET",
@@ -198,6 +206,7 @@ def test_format_log_markdown_empty_ai_output():
 def test_format_log_markdown_dry_run_omits_sections():
     """Test that dry-run mode omits AI Output and Response sections"""
     entry = LogEntry(
+        request_id="20251203-1415-30123456",
         timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
         status_code=200,
         method="GET",
@@ -226,4 +235,4 @@ def test_format_log_markdown_dry_run_omits_sections():
     # But still includes other sections
     assert "## Command" in markdown_dry
     assert "## Headers" in markdown_dry
-    assert "| Timestamp |" in markdown_dry
+    assert "| Timestamp  |" in markdown_dry

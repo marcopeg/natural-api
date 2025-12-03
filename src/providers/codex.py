@@ -71,38 +71,105 @@ class CodexProvider(AIProvider):
             print(f"[CodexProvider] Working directory: {self.workspace_dir}")
             print("[CodexProvider] --- Output Start ---")
             
-            # Run and capture output
-            result = subprocess.run(
+            # Stream output live while capturing it
+            import sys
+            import threading
+
+            proc = subprocess.Popen(
                 cmd,
                 cwd=str(self.workspace_dir),
-                capture_output=True,  # Capture output
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.timeout,
+                bufsize=1,  # line-buffered
             )
-            
-            # Also print to terminal for debugging
-            if result.stdout:
-                print(result.stdout)
-            if result.stderr:
-                print(result.stderr, file=__import__('sys').stderr)
-            
+
+            stdout_lines: list[str] = []
+            stderr_lines: list[str] = []
+
+            def _reader(stream, sink, collector):
+                try:
+                    for line in iter(stream.readline, ''):
+                        sink.write(line)
+                        sink.flush()
+                        collector.append(line)
+                finally:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+
+            t_out = threading.Thread(target=_reader, args=(proc.stdout, sys.stdout, stdout_lines))
+            t_err = threading.Thread(target=_reader, args=(proc.stderr, sys.stderr, stderr_lines))
+            t_out.daemon = True
+            t_err.daemon = True
+            t_out.start()
+            t_err.start()
+
+            try:
+                returncode = proc.wait(timeout=self.timeout)
+            except subprocess.TimeoutExpired:
+                # Kill process on timeout
+                proc.kill()
+                try:
+                    proc.communicate(timeout=2)
+                except Exception:
+                    pass
+                print("[CodexProvider] --- Output End ---")
+                print(f"[CodexProvider] Exit code: 124 (timeout)\n")
+                return AIProviderResult(
+                    stdout=''.join(stdout_lines),
+                    stderr=''.join(stderr_lines) + ("\n" if stderr_lines else "") + "[ERROR] Codex execution timed out",
+                    returncode=124,
+                    success=False,
+                    command=command_string,
+                    error_message=f"Codex execution exceeded timeout of {self.timeout} seconds"
+                )
+
+            # Ensure readers finish
+            t_out.join(timeout=2)
+            t_err.join(timeout=2)
+
             print("[CodexProvider] --- Output End ---")
-            print(f"[CodexProvider] Exit code: {result.returncode}\n")
-            
+            print(f"[CodexProvider] Exit code: {returncode}\n")
+
+            stdout_text = ''.join(stdout_lines)
+            stderr_text = ''.join(stderr_lines)
+
             return AIProviderResult(
-                stdout=result.stdout,
-                stderr=result.stderr,
-                returncode=result.returncode,
-                success=result.returncode == 0,
+                stdout=stdout_text,
+                stderr=stderr_text,
+                returncode=returncode,
+                success=returncode == 0,
                 command=command_string,
-                error_message=None if result.returncode == 0 else "Codex execution failed"
+                error_message=None if returncode == 0 else "Codex execution failed"
             )
         except subprocess.TimeoutExpired as e:
             import shlex
+            # Build command string for diagnostics
             command_string = " ".join(shlex.quote(arg) for arg in cmd) if 'cmd' in locals() else "codex (timeout before command built)"
+
+            # Normalize possible bytes to strings
+            def _to_str(val):
+                if val is None:
+                    return ""
+                if isinstance(val, bytes):
+                    try:
+                        return val.decode("utf-8", errors="replace")
+                    except Exception:
+                        return str(val)
+                return val
+
+            out = _to_str(getattr(e, "stdout", ""))
+            err = _to_str(getattr(e, "stderr", ""))
+            if err:
+                err = err + "\n[ERROR] Codex execution timed out"
+            else:
+                err = "[ERROR] Codex execution timed out"
+
             return AIProviderResult(
-                stdout=e.stdout or "",
-                stderr=(e.stderr or "") + "\n[ERROR] Codex execution timed out",
+                stdout=out,
+                stderr=err,
                 returncode=124,  # Standard timeout exit code
                 success=False,
                 command=command_string,

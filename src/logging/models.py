@@ -9,6 +9,7 @@ from datetime import datetime
 class LogEntry:
     """Complete log entry data structure"""
     
+    request_id: str | None
     timestamp: datetime
     status_code: int
     method: str
@@ -21,4 +22,5 @@ class LogEntry:
     headers: dict[str, str]
     ai_output: str
     response_body: str
+    cwd: str = ""
     error_context: str | None = None

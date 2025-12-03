@@ -80,7 +80,11 @@ def validate_project_exists(project_id: str):
 
 def setup_user_workspace(user_id: str, project_id: str):
     """
-    Setup user workspace directory with symlink to project's AGENTS.md if present.
+    Setup user workspace directory.
+    
+    Creates the user storage directory and the user+project workspace directory.
+    No AGENTS.md symlinks are created; prompt composition reads AGENTS.md directly
+    from the project directory when executing prompts.
     """
     from src.config import Config
     from pathlib import Path
@@ -90,8 +94,6 @@ def setup_user_workspace(user_id: str, project_id: str):
     
     # Get paths
     workspace_path = Config.get_user_workspace_dir(user_id, project_id)
-    project_agents_path = Config.get_project_dir(project_id) / "AGENTS.md"
-    workspace_agents_symlink = workspace_path / "AGENTS.md"
     
     # Create user directory if needed
     user_dir = Config.get_storage_dir() / user_id
@@ -101,42 +103,6 @@ def setup_user_workspace(user_id: str, project_id: str):
     # Create user+project workspace if needed
     workspace_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Ensured workspace exists: {workspace_path}")
-    
-    # Handle AGENTS.md symlink
-    if project_agents_path.exists():
-        # Check if symlink already exists
-        if workspace_agents_symlink.exists() or workspace_agents_symlink.is_symlink():
-            # Symlink exists - verify it points to correct location
-            if workspace_agents_symlink.is_symlink():
-                current_target = workspace_agents_symlink.resolve()
-                expected_target = project_agents_path.resolve()
-                if current_target != expected_target:
-                    logger.warning(
-                        f"AGENTS.md symlink points to wrong location. "
-                        f"Expected: {expected_target}, Got: {current_target}. "
-                        f"Recreating symlink."
-                    )
-                    workspace_agents_symlink.unlink()
-                    # Create relative symlink
-                    relative_path = Path("../../../projects") / project_id / "AGENTS.md"
-                    workspace_agents_symlink.symlink_to(relative_path)
-                else:
-                    logger.debug(f"AGENTS.md symlink already exists and is correct")
-            else:
-                logger.warning(
-                    f"AGENTS.md exists as regular file, not symlink. "
-                    f"Removing and creating symlink."
-                )
-                workspace_agents_symlink.unlink()
-                relative_path = Path("../../../projects") / project_id / "AGENTS.md"
-                workspace_agents_symlink.symlink_to(relative_path)
-        else:
-            # Create new symlink
-            relative_path = Path("../../../projects") / project_id / "AGENTS.md"
-            workspace_agents_symlink.symlink_to(relative_path)
-            logger.info(f"Created AGENTS.md symlink: {workspace_agents_symlink} -> {relative_path}")
-    else:
-        logger.debug(f"Project {project_id} has no AGENTS.md, skipping symlink")
     
     return workspace_path
 
@@ -164,6 +130,7 @@ from src.logging.context import RequestLogContext
 from src.logging.writer import write_log
 from src.logging.formatter import format_log_markdown
 from src.logging.html_formatter import format_log_html
+from src.logging.timestamp import generate_request_id, generate_timestamp
 
 
 # Setup logging
@@ -341,12 +308,24 @@ async def dynamic_prompt_handler(request: Request, path: str):
     
     # Initialize logging context early
     method = request.method
+    
+    # Generate timestamp once at the very beginning (used for request_id and log file)
+    request_timestamp = generate_timestamp()
+    
+    # Extract or generate request ID
+    # Client can provide custom request_id, but filename will still use generated timestamp
+    custom_request_id = request.headers.get('x-request-id')
+    file_request_id = generate_request_id(request_timestamp)  # Use same timestamp
+    display_request_id = custom_request_id if custom_request_id else file_request_id
+    
     log_ctx = RequestLogContext(
         method=method,
         path=full_path,
         project_id="default",  # Will be updated
         user_id="anonymous",   # Will be updated
-        headers=dict(request.headers)
+        headers=dict(request.headers),
+        request_id=display_request_id,
+        timestamp=request_timestamp
     )
     
     try:
@@ -390,10 +369,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             log_ctx.set_response(json.dumps(error_detail), 404)
             # Write log before raising exception
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=404, detail=error_detail)
+            raise HTTPException(status_code=404, detail=error_detail, headers={"x-request-id": display_request_id})
         
         logger.info(f"Matched prompt: {match.prompt.filename} (type={match.match_type}, params={match.path_params})")
         log_ctx.set_prompt(match.prompt.filename)
@@ -420,11 +399,14 @@ async def dynamic_prompt_handler(request: Request, path: str):
             # Execute in dry-run mode to get command
             workspace_dir = setup_user_workspace(user_id, project_id)
             executor = PromptExecutor(workspace_dir=workspace_dir, timeout=config.TIMEOUT_SECONDS)
+            # Record cwd for log metadata
+            log_ctx.set_cwd(str(workspace_dir))
             dry_result = executor.execute(
                 match.prompt,
                 route_params=match.path_params,
                 body_params=None,
-                dry_run=True
+                dry_run=True,
+                project_id=project_id
             )
             
             log_ctx.command = dry_result.command
@@ -442,10 +424,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             if prefers_html:
                 # Browser: return HTML
                 html = format_log_html(log_markdown)
-                return HTMLResponse(content=html, status_code=200)
+                return HTMLResponse(content=html, status_code=200, headers={"x-request-id": display_request_id})
             else:
                 # CLI/API clients: return plain markdown
-                return Response(content=log_markdown, media_type="text/plain", status_code=200)
+                return Response(content=log_markdown, media_type="text/plain", status_code=200, headers={"x-request-id": display_request_id})
         
         # NORMAL MODE: Execute and log
         
@@ -479,10 +461,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 500)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=500, detail=error_detail)
+                raise HTTPException(status_code=500, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Validate Content-Type
             content_type = request.headers.get('content-type', '')
@@ -495,10 +477,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 415)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=415, detail=error_detail)
+                raise HTTPException(status_code=415, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Parse request body
             try:
@@ -514,10 +496,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 400)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=400, detail=error_detail)
+                raise HTTPException(status_code=400, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Validate request body
             validated_data, validation_errors = validate_request_body(request_body, pydantic_model)
@@ -530,10 +512,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 }
                 log_ctx.set_response(json.dumps(error_detail), 422)
                 try:
-                    write_log(log_ctx.to_log_entry())
+                    write_log(log_ctx.to_log_entry(), file_request_id)
                 except IOError as log_err:
                     logger.error(f"Failed to write log: {log_err}")
-                raise HTTPException(status_code=422, detail=error_detail)
+                raise HTTPException(status_code=422, detail=error_detail, headers={"x-request-id": display_request_id})
             
             # Convert validated data to body_params (all values as strings for substitution)
             body_params = {k: str(v) if v is not None else "" for k, v in validated_data.items()}
@@ -541,6 +523,8 @@ async def dynamic_prompt_handler(request: Request, path: str):
         
         # Setup user workspace (creates dirs and symlinks as needed)
         workspace_dir = setup_user_workspace(user_id, project_id)
+        # Record cwd for log metadata
+        log_ctx.set_cwd(str(workspace_dir))
         
         # Initialize executor
         executor = PromptExecutor(
@@ -564,17 +548,18 @@ async def dynamic_prompt_handler(request: Request, path: str):
             }
             log_ctx.set_response(json.dumps(error_detail), 503)
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=503, detail=error_detail)
+            raise HTTPException(status_code=503, detail=error_detail, headers={"x-request-id": display_request_id})
         
         # Execute prompt
         result = executor.execute(
             match.prompt,
             route_params=match.path_params,
             body_params=body_params,
-            dry_run=dry_run
+            dry_run=dry_run,
+            project_id=project_id
         )
         
         # Update log context with execution result
@@ -591,10 +576,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
             }
             log_ctx.set_response(json.dumps(error_detail), 408)
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=408, detail=error_detail)
+            raise HTTPException(status_code=408, detail=error_detail, headers={"x-request-id": display_request_id})
         
         # Handle execution failure
         if not result.success:
@@ -608,16 +593,16 @@ async def dynamic_prompt_handler(request: Request, path: str):
             }
             log_ctx.set_response(json.dumps(error_detail), 500)
             try:
-                write_log(log_ctx.to_log_entry())
+                write_log(log_ctx.to_log_entry(), file_request_id)
             except IOError as log_err:
                 logger.error(f"Failed to write log: {log_err}")
-            raise HTTPException(status_code=500, detail=error_detail)
+            raise HTTPException(status_code=500, detail=error_detail, headers={"x-request-id": display_request_id})
         
         # Success - update log and write before returning
         log_ctx.set_response(result.stdout, 200)
         
         try:
-            log_path = write_log(log_ctx.to_log_entry())
+            log_path = write_log(log_ctx.to_log_entry(), file_request_id)
             logger.debug(f"Request logged to: {log_path}")
         except IOError as e:
             logger.error(f"Failed to write log: {e}")
@@ -626,11 +611,12 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 detail={
                     "error": "Logging Failed",
                     "message": f"Failed to write request log: {str(e)}"
-                }
+                },
+                headers={"x-request-id": display_request_id}
             )
         
         # Return raw stdout as plain text
-        return PlainTextResponse(content=result.stdout)
+        return PlainTextResponse(content=result.stdout, headers={"x-request-id": display_request_id})
         
     except ProviderNotFoundError as e:
         error_detail = {
@@ -640,10 +626,10 @@ async def dynamic_prompt_handler(request: Request, path: str):
         }
         log_ctx.set_response(json.dumps(error_detail), 503)
         try:
-            write_log(log_ctx.to_log_entry())
+            write_log(log_ctx.to_log_entry(), file_request_id)
         except:
             pass
-        raise HTTPException(status_code=503, detail=error_detail)
+        raise HTTPException(status_code=503, detail=error_detail, headers={"x-request-id": display_request_id})
     except HTTPException as e:
         # HTTP exceptions already logged above, just re-raise
         raise
@@ -657,7 +643,7 @@ async def dynamic_prompt_handler(request: Request, path: str):
         log_ctx.set_error("unexpected_error")
         log_ctx.set_response(json.dumps(error_detail), 500)
         try:
-            write_log(log_ctx.to_log_entry())
+            write_log(log_ctx.to_log_entry(), file_request_id)
         except:
             pass
-        raise HTTPException(status_code=500, detail=error_detail)
+        raise HTTPException(status_code=500, detail=error_detail, headers={"x-request-id": display_request_id})

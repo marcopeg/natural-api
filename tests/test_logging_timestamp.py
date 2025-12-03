@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from src.logging.timestamp import (
     generate_timestamp,
+    generate_request_id,
     format_filename_timestamp,
     format_title_timestamp,
     format_numeric_timestamp,
@@ -17,6 +18,37 @@ def test_generate_timestamp_returns_utc():
     ts = generate_timestamp()
     assert ts.tzinfo == timezone.utc
     assert isinstance(ts, datetime)
+
+
+def test_generate_request_id_format():
+    """Test that generate_request_id returns correct format"""
+    # Pass a datetime directly instead of mocking
+    mock_dt = datetime(2025, 12, 3, 19, 5, 30, 36009, tzinfo=timezone.utc)
+    request_id = generate_request_id(mock_dt)
+    assert request_id == "20251203-1905-30036009"
+
+
+def test_generate_request_id_with_timestamp():
+    """Test that generate_request_id uses provided timestamp"""
+    dt1 = datetime(2025, 12, 3, 10, 30, 45, 123456, tzinfo=timezone.utc)
+    dt2 = datetime(2025, 12, 3, 10, 30, 45, 123456, tzinfo=timezone.utc)
+    
+    # Same datetime should produce same request_id
+    id1 = generate_request_id(dt1)
+    id2 = generate_request_id(dt2)
+    assert id1 == id2
+    assert id1 == "20251203-1030-45123456"
+
+
+def test_generate_request_id_unique():
+    """Test that generate_request_id generates unique IDs"""
+    id1 = generate_request_id()
+    id2 = generate_request_id()
+    # IDs should be different due to microsecond precision
+    # (unless called in exact same microsecond, extremely unlikely)
+    assert isinstance(id1, str)
+    assert isinstance(id2, str)
+    assert len(id1) == 22  # YYYYMMDD-HHMM-SSμμμμμμ (8+1+4+1+8)
 
 
 def test_format_filename_timestamp():

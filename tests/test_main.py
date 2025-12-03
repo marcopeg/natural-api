@@ -740,4 +740,150 @@ def test_hidden_resources_blocked():
                                 assert response.status_code == 200
 
 
+def test_request_id_header_in_response():
+    """Test that x-request-id header is returned in response"""
+    mock_prompt = PromptMetadata(
+        filename="hi",
+        filepath=Path("/tmp/hi.md"),
+        method="GET",
+        route=None,
+        model=None,
+        agent=None,
+        body_schema=None,
+        dry=None,
+        raw_content="Test"
+    )
+    
+    mock_match = RouteMatch(
+        prompt=mock_prompt,
+        match_type="fallback",
+        path_params={}
+    )
+    
+    mock_result = AIProviderResult(
+        stdout="Hello",
+        stderr="",
+        returncode=0,
+        success=True,
+        error_message=None,
+        command="test command"
+    )
+    
+    with patch("src.config.config.project_exists", return_value=True):
+        with patch("src.config.config.get_project_prompts_dir", return_value=Path("/tmp/test/prompts")):
+            with patch("src.main.setup_user_workspace", return_value=Path("/tmp/workspace")):
+                with patch("src.prompts.router.DynamicRouter.load_prompts"):
+                    with patch("src.prompts.router.DynamicRouter.match_route", return_value=mock_match):
+                        with patch("src.providers.codex.CodexProvider.is_available", return_value=True):
+                            with patch("src.prompts.executor.PromptExecutor.execute", return_value=mock_result):
+                                response = client.get("/hi", headers=TEST_HEADERS)
+                                assert response.status_code == 200
+                                assert "x-request-id" in response.headers
+                                # Should be in format YYYYMMDD-HHMM-SSμμμμμμ (22 chars)
+                                request_id = response.headers["x-request-id"]
+                                assert len(request_id) == 22
+                                assert request_id[8] == "-"
+                                assert request_id[13] == "-"
+
+
+def test_custom_request_id_header():
+    """Test that custom x-request-id from request is returned in response"""
+    mock_prompt = PromptMetadata(
+        filename="hi",
+        filepath=Path("/tmp/hi.md"),
+        method="GET",
+        route=None,
+        model=None,
+        agent=None,
+        body_schema=None,
+        dry=None,
+        raw_content="Test"
+    )
+    
+    mock_match = RouteMatch(
+        prompt=mock_prompt,
+        match_type="fallback",
+        path_params={}
+    )
+    
+    mock_result = AIProviderResult(
+        stdout="Hello",
+        stderr="",
+        returncode=0,
+        success=True,
+        error_message=None,
+        command="test command"
+    )
+    
+    custom_headers = {**TEST_HEADERS, "x-request-id": "my-custom-id-12345"}
+    
+    with patch("src.config.config.project_exists", return_value=True):
+        with patch("src.config.config.get_project_prompts_dir", return_value=Path("/tmp/test/prompts")):
+            with patch("src.main.setup_user_workspace", return_value=Path("/tmp/workspace")):
+                with patch("src.prompts.router.DynamicRouter.load_prompts"):
+                    with patch("src.prompts.router.DynamicRouter.match_route", return_value=mock_match):
+                        with patch("src.providers.codex.CodexProvider.is_available", return_value=True):
+                            with patch("src.prompts.executor.PromptExecutor.execute", return_value=mock_result):
+                                response = client.get("/hi", headers=custom_headers)
+                                assert response.status_code == 200
+                                assert response.headers["x-request-id"] == "my-custom-id-12345"
+
+
+def test_request_id_in_dry_run_response():
+    """Test that x-request-id header is returned in dry-run response"""
+    mock_prompt = PromptMetadata(
+        filename="hi",
+        filepath=Path("/tmp/hi.md"),
+        method="GET",
+        route=None,
+        model=None,
+        agent=None,
+        body_schema=None,
+        dry=True,  # Prompt-level dry-run enabled
+        raw_content="Test"
+    )
+    
+    mock_match = RouteMatch(
+        prompt=mock_prompt,
+        match_type="fallback",
+        path_params={}
+    )
+    
+    mock_result = AIProviderResult(
+        stdout="",
+        stderr="",
+        returncode=0,
+        success=True,
+        error_message=None,
+        command="codex exec 'Test'"
+    )
+    
+    with patch("src.config.config.project_exists", return_value=True):
+        with patch("src.config.config.get_project_prompts_dir", return_value=Path("/tmp/test/prompts")):
+            with patch("src.main.setup_user_workspace", return_value=Path("/tmp/workspace")):
+                with patch("src.prompts.router.DynamicRouter.load_prompts"):
+                    with patch("src.prompts.router.DynamicRouter.match_route", return_value=mock_match):
+                        with patch("src.providers.codex.CodexProvider.is_available", return_value=True):
+                            with patch("src.prompts.executor.PromptExecutor.execute", return_value=mock_result):
+                                # CLI client (plain text response)
+                                response = client.get("/hi", headers=TEST_HEADERS)
+                                assert response.status_code == 200
+                                assert "x-request-id" in response.headers
+                                request_id = response.headers["x-request-id"]
+                                assert len(request_id) == 22
+
+
+def test_request_id_in_error_response():
+    """Test that x-request-id header is returned in error response"""
+    with patch("src.config.config.project_exists", return_value=True):
+        with patch("src.config.config.get_project_prompts_dir", return_value=Path("/tmp/test/prompts")):
+            with patch("src.prompts.router.DynamicRouter.load_prompts"):
+                with patch("src.prompts.router.DynamicRouter.match_route", return_value=None):
+                    # 404 error
+                        response = client.get("/nonexistent", headers=TEST_HEADERS)
+                        assert response.status_code == 404
+                        assert "x-request-id" in response.headers
+                        request_id = response.headers["x-request-id"]
+                        assert len(request_id) == 22
+
 

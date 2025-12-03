@@ -16,6 +16,7 @@ def test_write_log_success():
         mock_get_path.return_value = mock_path
         
         entry = LogEntry(
+            request_id="20251203-1415-30123456",
             timestamp=datetime(2025, 12, 3, 14, 15, 30, 123456, tzinfo=timezone.utc),
             status_code=200,
             method="GET",
@@ -48,6 +49,7 @@ def test_write_log_failure():
         mock_get_path.return_value = mock_path
         
         entry = LogEntry(
+            request_id="20251203-1415-30123456",
             timestamp=datetime.now(timezone.utc),
             status_code=200,
             method="GET",
