@@ -64,7 +64,7 @@ natural-api/
 ### 1) Dynamic Prompt-Based Routing
 
 Overview:
-HTTP requests are routed to AI prompts defined as Markdown files in `data/projects/{project}/prompts/*.md`. Adding a new prompt file automatically adds a new API endpoint—no code changes required.
+HTTP requests are routed to AI prompts defined as Markdown files in `data/projects/{project}/prompts/*.md`. Adding a new prompt file automatically adds a new API endpoint—no code changes required. At execution time, the prompt body is composed with the project’s `AGENTS.md` (placeholder insertion via `{{PROMPT}}` when present, otherwise concatenation). Variable substitution is then applied across the full composed text.
 
 Prompt Location:
 - Store prompts in: `data/projects/{project}/prompts/*.md`
@@ -246,7 +246,11 @@ ps aux | grep uvicorn | grep -v grep
 
 Projects (information directory):
 - Prompts per project in `data/projects/{project}/prompts/*.md`
-- `AGENTS.md` holds project-level AI guidance
+- `AGENTS.md` holds project-level AI guidance and is read directly from `data/projects/<project>/AGENTS.md` during execution. Composition rules:
+        - If `{{PROMPT}}` appears in `AGENTS.md`, the prompt body is inserted at the placeholder
+        - Otherwise, content is concatenated as: agents + blank line + prompt body
+- Variable substitution occurs after composition across the entire composed text
+- No symlink is created or required for `AGENTS.md` in user workspaces
 
 Storage (per-user runtime workspace):
 - `data/storage/{user-id}/{project-id}/` holds user data accessible by agents
