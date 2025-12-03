@@ -99,10 +99,30 @@ class CodexProvider(AIProvider):
             )
         except subprocess.TimeoutExpired as e:
             import shlex
+            # Build command string for diagnostics
             command_string = " ".join(shlex.quote(arg) for arg in cmd) if 'cmd' in locals() else "codex (timeout before command built)"
+
+            # Normalize possible bytes to strings
+            def _to_str(val):
+                if val is None:
+                    return ""
+                if isinstance(val, bytes):
+                    try:
+                        return val.decode("utf-8", errors="replace")
+                    except Exception:
+                        return str(val)
+                return val
+
+            out = _to_str(getattr(e, "stdout", ""))
+            err = _to_str(getattr(e, "stderr", ""))
+            if err:
+                err = err + "\n[ERROR] Codex execution timed out"
+            else:
+                err = "[ERROR] Codex execution timed out"
+
             return AIProviderResult(
-                stdout=e.stdout or "",
-                stderr=(e.stderr or "") + "\n[ERROR] Codex execution timed out",
+                stdout=out,
+                stderr=err,
                 returncode=124,  # Standard timeout exit code
                 success=False,
                 command=command_string,
