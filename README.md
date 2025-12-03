@@ -1,4 +1,4 @@
-# Codex API
+# Natural API
 
 REST API server that wraps AI CLI tools (Codex, Claude Code, GitHub Copilot) and exposes them via HTTP endpoints.
 
