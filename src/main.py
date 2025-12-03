@@ -80,7 +80,11 @@ def validate_project_exists(project_id: str):
 
 def setup_user_workspace(user_id: str, project_id: str):
     """
-    Setup user workspace directory with symlink to project's AGENTS.md if present.
+    Setup user workspace directory.
+    
+    Creates the user storage directory and the user+project workspace directory.
+    No AGENTS.md symlinks are created; prompt composition reads AGENTS.md directly
+    from the project directory when executing prompts.
     """
     from src.config import Config
     from pathlib import Path
@@ -90,8 +94,6 @@ def setup_user_workspace(user_id: str, project_id: str):
     
     # Get paths
     workspace_path = Config.get_user_workspace_dir(user_id, project_id)
-    project_agents_path = Config.get_project_dir(project_id) / "AGENTS.md"
-    workspace_agents_symlink = workspace_path / "AGENTS.md"
     
     # Create user directory if needed
     user_dir = Config.get_storage_dir() / user_id
@@ -101,42 +103,6 @@ def setup_user_workspace(user_id: str, project_id: str):
     # Create user+project workspace if needed
     workspace_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Ensured workspace exists: {workspace_path}")
-    
-    # Handle AGENTS.md symlink
-    if project_agents_path.exists():
-        # Check if symlink already exists
-        if workspace_agents_symlink.exists() or workspace_agents_symlink.is_symlink():
-            # Symlink exists - verify it points to correct location
-            if workspace_agents_symlink.is_symlink():
-                current_target = workspace_agents_symlink.resolve()
-                expected_target = project_agents_path.resolve()
-                if current_target != expected_target:
-                    logger.warning(
-                        f"AGENTS.md symlink points to wrong location. "
-                        f"Expected: {expected_target}, Got: {current_target}. "
-                        f"Recreating symlink."
-                    )
-                    workspace_agents_symlink.unlink()
-                    # Create relative symlink
-                    relative_path = Path("../../../projects") / project_id / "AGENTS.md"
-                    workspace_agents_symlink.symlink_to(relative_path)
-                else:
-                    logger.debug(f"AGENTS.md symlink already exists and is correct")
-            else:
-                logger.warning(
-                    f"AGENTS.md exists as regular file, not symlink. "
-                    f"Removing and creating symlink."
-                )
-                workspace_agents_symlink.unlink()
-                relative_path = Path("../../../projects") / project_id / "AGENTS.md"
-                workspace_agents_symlink.symlink_to(relative_path)
-        else:
-            # Create new symlink
-            relative_path = Path("../../../projects") / project_id / "AGENTS.md"
-            workspace_agents_symlink.symlink_to(relative_path)
-            logger.info(f"Created AGENTS.md symlink: {workspace_agents_symlink} -> {relative_path}")
-    else:
-        logger.debug(f"Project {project_id} has no AGENTS.md, skipping symlink")
     
     return workspace_path
 
@@ -424,7 +390,8 @@ async def dynamic_prompt_handler(request: Request, path: str):
                 match.prompt,
                 route_params=match.path_params,
                 body_params=None,
-                dry_run=True
+                dry_run=True,
+                project_id=project_id
             )
             
             log_ctx.command = dry_result.command
@@ -574,7 +541,8 @@ async def dynamic_prompt_handler(request: Request, path: str):
             match.prompt,
             route_params=match.path_params,
             body_params=body_params,
-            dry_run=dry_run
+            dry_run=dry_run,
+            project_id=project_id
         )
         
         # Update log context with execution result

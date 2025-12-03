@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from src.prompts.loader import PromptMetadata
+from src.prompts.composer import compose_prompt
 from src.prompts.variables import substitute_variables
 from src.providers.factory import ProviderFactory
 from src.providers.base import AIProviderResult
@@ -34,6 +35,7 @@ class PromptExecutor:
         route_params: dict[str, str] | None = None,
         body_params: dict[str, str] | None = None,
         dry_run: bool = False,
+        project_id: str = "test",
     ) -> AIProviderResult:
         """
         Execute a prompt with variable substitution.
@@ -47,9 +49,10 @@ class PromptExecutor:
         Returns:
             AIProviderResult from provider execution
         """
-        # Substitute variables in prompt body
+        # Compose with project agents (AGENTS.md) then substitute variables
+        composed = compose_prompt(prompt_body=prompt.raw_content, project_id=project_id)
         processed_prompt = substitute_variables(
-            prompt.raw_content,
+            composed,
             route_params=route_params,
             body_params=body_params
         )
