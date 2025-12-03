@@ -58,6 +58,7 @@ def _format_metadata_table(entry: LogEntry) -> str:
         f"| Project   | {entry.project_id:<26} |",
         f"| User      | {entry.user_id:<26} |",
         f"| Prompt    | {prompt_name:<26} |",
+        f"| CWD       | {entry.cwd:<26} |",
         f"| Duration  | {duration_str:<26} |",
     ]
     return "\n".join(lines)

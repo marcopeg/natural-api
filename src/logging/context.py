@@ -39,6 +39,7 @@ class RequestLogContext:
         self.response_body: str = ""
         self.status_code: int = 500  # Default to error
         self.error_context: str | None = None
+        self.cwd: str = ""
     
     def set_prompt(self, filename: str):
         """Set prompt filename"""
@@ -63,6 +64,10 @@ class RequestLogContext:
     def set_error(self, context: str):
         """Set error context (e.g., 'timeout', 'execution_failed')"""
         self.error_context = context
+
+    def set_cwd(self, cwd: str):
+        """Set current working directory used for provider execution"""
+        self.cwd = cwd
     
     def get_duration_ms(self) -> int:
         """Calculate duration in milliseconds"""
@@ -92,6 +97,7 @@ class RequestLogContext:
             user_id=self.user_id,
             prompt_filename=self.prompt_filename,
             duration_ms=self.get_duration_ms(),
+            cwd=self.cwd,
             command=self.command,
             headers=filtered_headers,
             ai_output=self.ai_output,

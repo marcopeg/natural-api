@@ -386,6 +386,8 @@ async def dynamic_prompt_handler(request: Request, path: str):
             # Execute in dry-run mode to get command
             workspace_dir = setup_user_workspace(user_id, project_id)
             executor = PromptExecutor(workspace_dir=workspace_dir, timeout=config.TIMEOUT_SECONDS)
+            # Record cwd for log metadata
+            log_ctx.set_cwd(str(workspace_dir))
             dry_result = executor.execute(
                 match.prompt,
                 route_params=match.path_params,
@@ -508,6 +510,8 @@ async def dynamic_prompt_handler(request: Request, path: str):
         
         # Setup user workspace (creates dirs and symlinks as needed)
         workspace_dir = setup_user_workspace(user_id, project_id)
+        # Record cwd for log metadata
+        log_ctx.set_cwd(str(workspace_dir))
         
         # Initialize executor
         executor = PromptExecutor(

@@ -21,4 +21,5 @@ class LogEntry:
     headers: dict[str, str]
     ai_output: str
     response_body: str
+    cwd: str = ""
     error_context: str | None = None
